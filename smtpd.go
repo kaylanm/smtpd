@@ -24,8 +24,6 @@ import (
 )
 
 var (
-	// Debug `true` enables verbose logging.
-	Debug      = false
 	rcptToRE   = regexp.MustCompile(`[Tt][Oo]:\s?<(.+)>`)
 	mailFromRE = regexp.MustCompile(`[Ff][Rr][Oo][Mm]:\s?<(.*)>(\s(.*))?`) // Delivery Status Notifications are sent with "MAIL FROM:<>"
 	mailSizeRE = regexp.MustCompile(`[Ss][Ii][Zz][Ee]=(\d+)`)
@@ -89,6 +87,7 @@ type Server struct {
 	Handler      Handler
 	HandlerRcpt  HandlerRcpt
 	Hostname     string
+	Debug        bool // Enable verbose logging of traffic
 	LogRead      LogFunc
 	LogWrite     LogFunc
 	MaxSize      int // Maximum message size allowed, in bytes
@@ -626,7 +625,7 @@ func (s *session) writef(format string, args ...interface{}) error {
 	fmt.Fprintf(s.bw, line+"\r\n")
 	err := s.bw.Flush()
 
-	if Debug {
+	if s.srv.Debug {
 		verb := "WROTE"
 		if s.srv.LogWrite != nil {
 			s.srv.LogWrite(s.remoteIP, verb, line)
@@ -650,7 +649,7 @@ func (s *session) readLine() (string, error) {
 	}
 	line = strings.TrimSpace(line) // Strip trailing \r\n
 
-	if Debug {
+	if s.srv.Debug {
 		verb := "READ"
 		if s.srv.LogRead != nil {
 			s.srv.LogRead(s.remoteIP, verb, line)
@@ -700,6 +699,15 @@ func (s *session) readData() ([]byte, error) {
 			if len(data)+len(line) > s.srv.MaxSize {
 				_, _ = s.br.Discard(s.br.Buffered()) // Discard the buffer remnants.
 				return nil, maxSizeExceeded(s.srv.MaxSize)
+			}
+		}
+
+		if s.srv.Debug {
+			verb := "READDATA"
+			if s.srv.LogRead != nil {
+				s.srv.LogRead(s.remoteIP, verb, string(line))
+			} else {
+				log.Println(s.remoteIP, verb, string(line))
 			}
 		}
 
